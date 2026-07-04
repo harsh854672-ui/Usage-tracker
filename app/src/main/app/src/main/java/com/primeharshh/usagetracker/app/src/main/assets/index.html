@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usage Tracker</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family: 'Segoe UI', sans-serif; }
+  body {
+    background: linear-gradient(160deg, #0f0817, #1a0f2e 60%, #0f0817);
+    color: #eae4f7;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  h1 {
+    font-size: 20px;
+    background: linear-gradient(90deg, #a855f7, #ec4899);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 4px;
+  }
+  .sub { color: #9d8fb8; font-size: 12px; margin-bottom: 16px; }
+
+  .permBox {
+    background: rgba(168,85,247,0.1);
+    border: 1px solid rgba(168,85,247,0.4);
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .btn {
+    background: linear-gradient(90deg, #a855f7, #ec4899);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-top: 10px;
+    font-weight: 600;
+  }
+
+  .statRow {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .statCard {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(168,85,247,0.25);
+    border-radius: 12px;
+    padding: 12px;
+    text-align: center;
+  }
+  .statCard .val { font-size: 18px; font-weight: 700; color: #ec4899; }
+  .statCard .lbl { font-size: 11px; color: #9d8fb8; margin-top: 2px; }
+
+  .sectionTitle {
+    font-size: 14px;
+    color: #c9b8f0;
+    margin: 18px 0 10px;
+    border-left: 3px solid #a855f7;
+    padding-left: 8px;
+  }
+
+  .appCard {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255,255,255,0.04);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .appCard .name { font-size: 13px; font-weight: 600; }
+  .appCard .times { font-size: 10px; color: #9d8fb8; margin-top: 3px; }
+  .appCard .dur { font-size: 13px; color: #ec4899; font-weight: 700; }
+
+  .timelineItem {
+    display: flex;
+    gap: 10px;
+    font-size: 12px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .timelineItem .time { color: #a855f7; min-width: 60px; font-weight: 600; }
+  .timelineItem .desc { color: #d8cdf0; }
+
+  .refresh { text-align:center; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+  <h1>📊 Usage Tracker</h1>
+  <div class="sub">Prime Harshh — App & Screen Time</div>
+
+  <div id="permBox" class="permBox" style="display:none;">
+    <div>Usage Access permission chahiye data dikhane ke liye</div>
+    <button class="btn" onclick="askPermission()">Permission Allow Karo</button>
+  </div>
+
+  <div id="content" style="display:none;">
+    <div class="statRow">
+      <div class="statCard">
+        <div class="val" id="totalScreenTime">--</div>
+        <div class="lbl">Total Screen ON</div>
+      </div>
+      <div class="statCard">
+        <div class="val" id="wakeCount">--</div>
+        <div class="lbl">Phone Wake Count</div>
+      </div>
+      <div class="statCard">
+        <div class="val" id="lastUsed">--</div>
+        <div class="lbl">Last Used</div>
+      </div>
+    </div>
+
+    <div class="sectionTitle">App-wise Usage (last 24h)</div>
+    <div id="appList"></div>
+
+    <div class="sectionTitle">Screen ON/OFF Timeline</div>
+    <div id="screenTimeline"></div>
+
+    <div class="refresh">
+      <button class="btn" onclick="loadData()">🔄 Refresh</button>
+    </div>
+  </div>
+
+<script>
+function fmtTime(ms) {
+  const d = new Date(ms);
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtDuration(ms) {
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function checkPermission() {
+  const has = window.Android.hasPermission();
+  document.getElementById('permBox').style.display = has ? 'none' : 'block';
+  document.getElementById('content').style.display = has ? 'block' : 'none';
+  return has;
+}
+
+function askPermission() {
+  window.Android.requestPermission();
+}
+
+function loadData() {
+  if (!checkPermission()) return;
+
+  const raw = window.Android.getUsageData(24);
+  const data = JSON.parse(raw);
+
+  if (!data.ok) {
+    alert('Error: ' + data.error);
+    return;
+  }
+
+  const screenEvents = data.screenEvents.sort((a,b) => a.time - b.time);
+  let totalOnMs = 0;
+  let wakeCount = 0;
+  let lastOnTime = null;
+  const timelineHtml = [];
+
+  for (let i = 0; i < screenEvents.length; i++) {
+    const ev = screenEvents[i];
+    if (ev.type === 'ON') {
+      wakeCount++;
+      lastOnTime = ev.time;
+      timelineHtml.push(`<div class="timelineItem"><div class="time">${fmtTime(ev.time)}</div><div class="desc">📱 Phone wake hua</div></div>`);
+    } else {
+      if (lastOnTime) {
+        totalOnMs += (ev.time - lastOnTime);
+      }
+      timelineHtml.push(`<div class="timelineItem"><div class="time">${fmtTime(ev.time)}</div><div class="desc">🌑 Screen off / band hua</div></div>`);
+    }
+  }
+
+  document.getElementById('totalScreenTime').innerText = fmtDuration(totalOnMs);
+  document.getElementById('wakeCount').innerText = wakeCount;
+  document.getElementById('screenTimeline').innerHTML = timelineHtml.reverse().slice(0, 40).join('');
+
+  const appEvents = data.appEvents.sort((a,b) => a.time - b.time);
+  const appMap = {};
+
+  appEvents.forEach(ev => {
+    if (!appMap[ev.pkg]) {
+      appMap[ev.pkg] = { name: ev.app, totalMs: 0, openTime: null, lastOpen: null, lastClose: null };
+    }
+    const a = appMap[ev.pkg];
+    if (ev.type === 'OPEN') {
+      a.openTime = ev.time;
+      a.lastOpen = ev.time;
+    } else if (ev.type === 'CLOSE' && a.openTime) {
+      a.totalMs += (ev.time - a.openTime);
+      a.lastClose = ev.time;
+      a.openTime = null;
+    }
+  });
+
+  const sortedApps = Object.values(appMap).sort((a,b) => b.totalMs - a.totalMs);
+
+  let lastUsedApp = null, lastUsedTime = 0;
+  sortedApps.forEach(a => {
+    if (a.lastOpen && a.lastOpen > lastUsedTime) {
+      lastUsedTime = a.lastOpen;
+      lastUsedApp = a.name;
+    }
+  });
+  document.getElementById('lastUsed').innerText = lastUsedApp || '--';
+
+  const appHtml = sortedApps.slice(0, 25).map(a => {
+    const openStr = a.lastOpen ? fmtTime(a.lastOpen) : '--';
+    const closeStr = a.lastClose ? fmtTime(a.lastClose) : '--';
+    return `<div class="appCard">
+      <div>
+        <div class="name">${a.name}</div>
+        <div class="times">Open: ${openStr} • Close: ${closeStr}</div>
+      </div>
+      <div class="dur">${fmtDuration(a.totalMs)}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('appList').innerHTML = appHtml || '<div class="sub">Koi data nahi mila</div>';
+}
+
+checkPermission();
+if (checkPermission()) loadData();
+</script>
+</body>
+</html>
