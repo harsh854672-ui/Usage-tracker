@@ -22,18 +22,43 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        try {
+            super.onCreate(savedInstanceState)
+            webView = WebView(this)
+            setContentView(webView)
 
-        webView = WebView(this)
-        setContentView(webView)
-
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        webView.webViewClient = WebViewClient()
-        webView.addJavascriptInterface(UsageBridge(), "Android")
-        webView.loadUrl("file:///android_asset/index.html")
+            webView.settings.javaScriptEnabled = true
+            webView.settings.domStorageEnabled = true
+            webView.webViewClient = object : WebViewClient() {
+                override fun onReceivedError(
+                    view: WebView?,
+                    errorCode: Int,
+                    description: String?,
+                    failingUrl: String?
+                ) {
+                    showError("WebView load error: $description (url: $failingUrl)")
+                }
+            }
+            webView.addJavascriptInterface(UsageBridge(), "Android")
+            webView.loadUrl("file:///android_asset/index.html")
+        } catch (e: Throwable) {
+            showError(e.stackTraceToString())
+        }
     }
 
+    private fun showError(message: String) {
+        val tv = android.widget.TextView(this)
+        tv.text = "CRASH / ERROR:\n\n$message"
+        tv.setTextColor(android.graphics.Color.WHITE)
+        tv.setBackgroundColor(android.graphics.Color.BLACK)
+        tv.textSize = 12f
+        tv.setPadding(24, 60, 24, 24)
+        val scroll = android.widget.ScrollView(this)
+        scroll.addView(tv)
+        setContentView(scroll)
+    }
+
+    /** Bridge exposed to JS: window.Android.xxx() */
     inner class UsageBridge {
 
         @JavascriptInterface
